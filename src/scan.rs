@@ -1,7 +1,7 @@
 /* © Copyright Topaz Foundation, 2024. All rights reserved © */
 
-/* A scanner in a compiler is the initial phase that transforms raw source code
- * into a series of tokens, the units of a programming language's syntax. */
+/* A scanner in a compiler is the initial phase that transforms source code
+ * into a series of tokens, the units of Topaz's syntax. */
 
 /* Imports */
 use std::iter::Peekable;
@@ -24,8 +24,8 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    /* Processes characters sequentially to form and yield a string or numeric sequence
-     * based on a specified criterion. */
+    /* Processes characters sequentially to form and yield a string or numeric
+     * sequence based on a specified criterion. */
     pub fn consume(&mut self, rune: char, base: impl Fn(char) -> bool) -> String {
         let mut result = rune.to_string();
 
@@ -33,6 +33,10 @@ impl<'a> Scanner<'a> {
             if base(next_rune) {
                 result.push(next_rune);
                 self.iter.next();
+
+                if rune == '"' && next_rune == '"' {
+                    break;
+                }
             } else {
                 break;
             }
@@ -45,8 +49,12 @@ impl<'a> Scanner<'a> {
 /* A comprehensive token enumeration representing all different possible types */
 #[derive(Debug, PartialEq)] // debug for printing, partialeq for testing.
 pub enum Type {
-    /* Data Types */
+    /* Literals */
+    Identifier(String),
+
     Integer(f64),
+    Boolean(bool),
+    String(String),
 
     /* Operators */
     LParen,
@@ -55,6 +63,22 @@ pub enum Type {
     Dash,
     Star,
     Slash,
+    Equals,
+
+    /* Keywords */
+    Struct,
+    Extend,
+    Func,
+    If,
+    Else,
+    While,
+    For,
+    Import,
+    Return,
+
+    /* Miscelleneous */
+    Error,
+    Eof,
 }
 
 /* Function scans and tokenizes input string into separate tokens, returning a
@@ -72,6 +96,11 @@ pub fn scan(stream: &str) -> Vec<Type> {
                     .expect("failer to consume integer value");
                 scanner.tokens.push(Type::Integer(number))
             }
+            '"' => {
+                let string = scanner.consume(rune, |_| true);
+                scanner.tokens.push(Type::String(string))
+            }
+
             '(' => scanner.tokens.push(Type::LParen),
             ')' => scanner.tokens.push(Type::RParen),
 
@@ -79,10 +108,31 @@ pub fn scan(stream: &str) -> Vec<Type> {
             '-' => scanner.tokens.push(Type::Dash),
             '*' => scanner.tokens.push(Type::Star),
             '/' => scanner.tokens.push(Type::Slash),
-            '"' => continue,
+
+            '=' => scanner.tokens.push(Type::Equals),
+
+            rune if rune.is_ascii_alphabetic() || rune == '_' => {
+                let token = scanner.consume(rune, |ch| ch.is_ascii_alphabetic() || ch == '_');
+
+                match token.as_str() {
+                    "struct" => scanner.tokens.push(Type::Struct),
+                    "extend" => scanner.tokens.push(Type::Extend),
+                    "func" => scanner.tokens.push(Type::Func),
+                    "if" => scanner.tokens.push(Type::If),
+                    "else" => scanner.tokens.push(Type::Else),
+                    "while" => scanner.tokens.push(Type::While),
+                    "for" => scanner.tokens.push(Type::For),
+                    "import" => scanner.tokens.push(Type::Import),
+                    "return" => scanner.tokens.push(Type::Return),
+                    "true" => scanner.tokens.push(Type::Boolean(true)),
+                    "false" => scanner.tokens.push(Type::Boolean(false)),
+                    _ => scanner.tokens.push(Type::Identifier(token)),
+                }
+            }
+
             _ => panic!("Unexpected syntax!"),
         }
     }
-
+    scanner.tokens.push(Type::Eof);
     scanner.tokens
 }
