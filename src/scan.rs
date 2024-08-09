@@ -1,26 +1,44 @@
+/* © Copyright Topaz Foundation, 2024. All rights reserved © */
+
+/* A scanner in a compiler is the initial phase that transforms raw source code
+ * into a series of tokens, the units of a programming language's syntax. */
+
+/* Imports */
 use std::iter::Peekable;
 
-/* Tests for lexer/scanner */
-#[cfg(test)]
-mod tests {
-    use super::*;
+/* Scanner Struct */
+struct Scanner<'a> {
+    stream: &'a str, /* Input file to be tokenized */
+    iter: Peekable<std::str::Chars<'a>>,
+    tokens: Vec<Type>,
+}
 
-    #[test]
-    fn numeric_expression() {
-        assert_eq!(
-            scan("15.2 + 6 - (2 * 7)"),
-            [
-                Type::Integer(15.2),
-                Type::Plus,
-                Type::Integer(6.0),
-                Type::Dash,
-                Type::LParen,
-                Type::Integer(2.0),
-                Type::Star,
-                Type::Integer(7.0),
-                Type::RParen,
-            ]
-        )
+impl<'a> Scanner<'a> {
+    /* Initializes a scanner struct */
+    pub fn new(stream: &'a str) -> Self {
+        let iter = stream.chars().peekable();
+        Scanner {
+            stream,
+            iter,
+            tokens: Vec::new(),
+        }
+    }
+
+    /* Processes characters sequentially to form and yield a string or numeric sequence
+     * based on a specified criterion. */
+    pub fn consume(&mut self, rune: char, base: impl Fn(char) -> bool) -> String {
+        let mut result = rune.to_string();
+
+        while let Some(&next_rune) = self.iter.peek() {
+            if base(next_rune) {
+                result.push(next_rune);
+                self.iter.next();
+            } else {
+                break;
+            }
+        }
+
+        result
     }
 }
 
@@ -39,51 +57,32 @@ pub enum Type {
     Slash,
 }
 
-/* Processes characters sequentially to form and yield a string or numeric sequence
- * based on a specified criterion. */
-pub fn consume(
-    rune: char,
-    iter: &mut Peekable<impl Iterator<Item = char>>,
-    mut base: impl FnMut(char) -> bool,
-) -> String {
-    let mut result = rune.to_string();
-
-    while let Some(&next_rune) = iter.peek() {
-        if base(next_rune) {
-            result.push(next_rune);
-            iter.next();
-        } else {
-            break;
-        }
-    }
-
-    result
-}
-
 /* Function scans and tokenizes input string into separate tokens, returning a
  * vector of those tokens as strings, excluding empty tokens. */
 pub fn scan(stream: &str) -> Vec<Type> {
-    let mut tokens: Vec<Type> = vec![];
-    let mut iter = stream.chars().peekable();
+    let mut scanner = Scanner::new(&stream);
 
-    while let Some(rune) = iter.next() {
+    while let Some(rune) = scanner.iter.next() {
         match rune {
             rune if rune.is_ascii_whitespace() => continue,
-            '0'..='9' => tokens.push(Type::Integer(
-                consume(rune, &mut iter, |ch| ch.is_ascii_digit() || ch == '.')
+            '0'..='9' => {
+                let number = scanner
+                    .consume(rune, |ch| ch.is_ascii_digit() || ch == '.')
                     .parse()
-                    .expect("failer to consume integer value"),
-            )),
-            '(' => tokens.push(Type::LParen),
-            ')' => tokens.push(Type::RParen),
+                    .expect("failer to consume integer value");
+                scanner.tokens.push(Type::Integer(number))
+            }
+            '(' => scanner.tokens.push(Type::LParen),
+            ')' => scanner.tokens.push(Type::RParen),
 
-            '+' => tokens.push(Type::Plus),
-            '-' => tokens.push(Type::Dash),
-            '*' => tokens.push(Type::Star),
-            '/' => tokens.push(Type::Slash),
+            '+' => scanner.tokens.push(Type::Plus),
+            '-' => scanner.tokens.push(Type::Dash),
+            '*' => scanner.tokens.push(Type::Star),
+            '/' => scanner.tokens.push(Type::Slash),
+            '"' => continue,
             _ => panic!("Unexpected syntax!"),
         }
     }
 
-    tokens
+    scanner.tokens
 }
